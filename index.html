@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Danmaku Shooter</title>
+  <style>
+    :root{
+      --ui-bg: rgba(10,12,20,0.6);
+      --ui-text: #e8f0ff;
+      --accent: #6cf;
+      --danger: #ff6b6b;
+      --success: #8af38a;
+      --warn: #ffd166;
+    }
+    html,body{ height:100%; margin:0; background:#05070e; color:var(--ui-text); font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; }
+    #wrap{ position:relative; height:100%; width:100%; overflow:hidden; }
+    canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; background: radial-gradient(1200px 800px at 50% 60%, #0b1230 0%, #05070e 60%, #03040a 100%); }
+    .hud{ position:absolute; left:12px; top:12px; background: var(--ui-bg); padding:10px 12px; border:1px solid rgba(255,255,255,0.1); border-radius:14px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); backdrop-filter: blur(6px); pointer-events:none; }
+    .hud h1{ margin:0 0 6px; font-size:14px; font-weight:700; letter-spacing: .08em; color:#a3b8ff; }
+    .hud .row{ display:flex; gap:12px; align-items:center; font-size:14px; }
+    .hud .stat{ display:flex; gap:6px; align-items:center; }
+    .tag{ padding:2px 8px; border-radius:999px; background:#0e173a; color:#b9c9ff; font-size:12px; border:1px solid rgba(255,255,255,0.1) }
+
+    .corner{ position:absolute; right:12px; top:12px; display:flex; gap:8px; }
+    .btn{ appearance:none; border:none; background: var(--ui-bg); color:var(--ui-text); padding:10px 14px; border-radius:14px; border:1px solid rgba(255,255,255,0.12); cursor:pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.35); backdrop-filter: blur(6px); font-weight:700; letter-spacing:.02em; }
+    .btn:hover{ background: rgba(20,24,40,0.7); }
+    .btn:active{ transform: translateY(1px); }
+
+    #overlay{ position:absolute; inset:0; display:grid; place-items:center; background: radial-gradient(1200px 800px at 50% 60%, rgba(17,24,39,0.7), rgba(3,4,10,0.95)), url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><g fill="none" stroke="%23223366" stroke-width="0.6" opacity="0.35"><path d="M0 20H40M20 0V40"/></g></svg>'); background-size: cover, 20px 20px; color:#e6eeff; text-align:center; padding:24px; }
+    .panel{ max-width:900px; padding:28px; border-radius:20px; background:rgba(6,8,18,0.7); border:1px solid rgba(255,255,255,0.1); box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+    .title{ font-size: clamp(28px, 4vw, 48px); margin: 0 0 6px; font-weight:900; letter-spacing:.02em; background: linear-gradient(90deg,#9cc7ff,#c3f3ff,#a9e6ff); -webkit-background-clip:text; color:transparent; }
+    .subtitle{ margin:0 0 16px; color:#b8c8ff; font-weight:600; letter-spacing:.03em; }
+    .grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px; text-align:left; }
+    .card{ background: rgba(14,18,32,0.85); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:14px; }
+    .kbd{ display:inline-block; padding:2px 8px; border-radius:8px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.05); font-weight:700; font-size:12px; }
+
+    .hpbar{ position:absolute; left:50%; transform: translateX(-50%); bottom:14px; width:min(720px, 88vw); height:12px; border-radius:999px; border:1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.05); overflow:hidden; box-shadow:0 8px 18px rgba(0,0,0,.45); }
+    .hpbar > div{ height:100%; background: linear-gradient(90deg,#6cf,#9df,#c6f); width:0%; transition: width 150ms linear; }
+
+    .toast{ position:absolute; left:50%; top:16%; transform: translateX(-50%); padding:10px 16px; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.2); border-radius:999px; font-weight:700; letter-spacing:.05em; display:none; }
+
+    @media (max-width: 820px){
+      .hud{ font-size:12px; }
+      .btn{ padding:8px 12px; }
+      .hpbar{ bottom:10px; }
+      .panel{ padding:18px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game" aria-label="Danmaku Shooter"></canvas>
+
+    <div class="hud" id="hud">
+      <h1>DANMAKU SHOOTER</h1>
+      <div class="row">
+        <div class="stat"><span class="tag">SCORE</span> <span id="score">0</span></div>
+        <div class="stat"><span class="tag">GRAZE</span> <span id="graze">0</span></div>
+        <div class="stat"><span class="tag">LIVES</span> <span id="lives">3</span></div>
+        <div class="stat"><span class="tag">BOMBS</span> <span id="bombs">3</span></div>
+        <div class="stat"><span class="tag">FPS</span> <span id="fps">60</span></div>
+      </div>
+    </div>
+
+    <div class="corner">
+      <button class="btn" id="btnStart">▶ Start</button>
+      <button class="btn" id="btnPause">⏸ Pause</button>
+      <button class="btn" id="btnMute">🔈 Sound</button>
+    </div>
+
+    <div class="hpbar" id="hpbar" style="display:none"><div id="hpfill"></div></div>
+
+    <div id="overlay">
+      <div class="panel">
+        <h1 class="title">DANMAKU SHOOTER</h1>
+        <p class="subtitle">Webブラウザで遊べる、軽量・高密度の弾幕シューティング。</p>
+        <div class="grid">
+          <div class="card">
+            <strong>操作</strong><br>
+            <span class="kbd">← → ↑ ↓ / WASD</span> 移動<br>マウス：カーソル追従<br>
+            <span class="kbd">Shift</span> 精密移動（ヒットボックス表示）<br>
+            <span class="kbd">X</span> ボム（弾消し）<br>
+            <span class="kbd">P</span> 一時停止 / 再開<br>
+            <span class="kbd">Enter</span> 開始 / リトライ
+          </div>
+          <div class="card">
+            <strong>ルール</strong><br>
+            ・自機は常にショットを発射<br>
+            ・弾に <em>かすり</em> でスコア加算<br>
+            ・被弾でミス（無敵時間あり）<br>
+            ・ステージ後半にボス出現
+          </div>
+          <div class="card">
+            <strong>ヒント</strong><br>
+            ・Shiftで微調整＆ヒットボックス確認<br>
+            ・敵の根元より弾の“隙間”を見るべし<br>
+            ・ピンチは <span class="kbd">X</span> で弾消し！
+          </div>
+        </div>
+        <p style="opacity:.8;margin-top:14px">準備ができたら <span class="kbd">Enter</span> または「Start」を押してください。</p>
+      </div>
+    </div>
+
+    <div class="toast" id="toast">PAUSED</div>
+  </div>
+
+<script>
+(function(){
+  'use strict';
+  // ===== Utilities =====
+  const clamp = (v,min,max)=> v<min?min:(v>max?max:v);
+  const rand = (a=1,b=0)=> Math.random()*(b-a)+a;
+  const TAU = Math.PI*2;
+  const dist2 = (x1,y1,x2,y2)=>{ const dx=x2-x1, dy=y2-y1; return dx*dx+dy*dy; };
+
+  // ===== Canvas & DPI =====
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let DPR = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+  let WIDTH=0, HEIGHT=0, CX=0, CY=0;
+  function resize(){
+    const w = canvas.clientWidth; const h = canvas.clientHeight;
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+    canvas.width = Math.floor(w*DPR);
+    canvas.height= Math.floor(h*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    WIDTH = w; HEIGHT = h; CX=WIDTH/2; CY=HEIGHT*0.75;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ===== DOM HUD =====
+  const $score = document.getElementById('score');
+  const $graze = document.getElementById('graze');
+  const $lives = document.getElementById('lives');
+  const $bombs = document.getElementById('bombs');
+  const $fps = document.getElementById('fps');
+  const $overlay = document.getElementById('overlay');
+  const $btnStart = document.getElementById('btnStart');
+  const $btnPause = document.getElementById('btnPause');
+  const $btnMute = document.getElementById('btnMute');
+  const $hpbar = document.getElementById('hpbar');
+  const $hpfill = document.getElementById('hpfill');
+  const $toast = document.getElementById('toast');
+
+  // ===== Inputs =====
+  const keys = new Set();
+  const KEY = {LEFT:37,UP:38,RIGHT:39,DOWN:40, Z:90, X:88, P:80, SHIFT:16, ENTER:13, W:87,A:65,S:83,D:68};
+  window.addEventListener('keydown', e=>{ keys.add(e.keyCode); if([37,38,39,40,32].includes(e.keyCode)) e.preventDefault();
+    if(e.keyCode===KEY.P) togglePause();
+    if(e.keyCode===KEY.ENTER && (state===STATE.TITLE||state===STATE.GAMEOVER||state===STATE.VICTORY)) startGame();
+    if(e.keyCode===KEY.X) useBomb();
+  });
+  window.addEventListener('keyup', e=> keys.delete(e.keyCode));
+
+  // ===== Mouse (cursor follow) =====
+  const mouse = { x: CX, y: HEIGHT-80, enabled: true };
+  canvas.addEventListener('mousemove', (e)=>{
+    const r = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - r.left;
+    mouse.y = e.clientY - r.top;
+  });
+
+  // ===== Audio (simple, optional) =====
+  let audioEnabled = false;
+  const AC = (window.AudioContext||window.webkitAudioContext);
+  let actx = null;
+  function beep(freq=440, dur=0.06, type='square', gain=0.03){
+    if(!audioEnabled) return;
+    try{
+      if(!actx) actx = new AC();
+      const o = actx.createOscillator();
+      const g = actx.createGain();
+      o.type = type; o.frequency.value=freq;
+      g.gain.value = gain;
+      o.connect(g).connect(actx.destination);
+      o.start(); o.stop(actx.currentTime+dur);
+    }catch(e){ /* noop */ }
+  }
+  $btnMute.addEventListener('click', ()=>{
+    audioEnabled = !audioEnabled; if(audioEnabled && !actx){ try{ actx = new AC(); }catch{} }
+    $btnMute.textContent = audioEnabled? '🔊 Sound':'🔈 Sound';
+  });
+
+  // ===== Game State =====
+  const STATE = { TITLE:0, PLAY:1, PAUSE:2, GAMEOVER:3, VICTORY:4 };
+  let state = STATE.TITLE;
+  let score=0, graze=0, lives=3, bombs=3;
+  let time=0;
+  let lastTime=performance.now();
+  let fps=60, fpsAccum=0, fpsCount=0;
+
+  // ===== Entities =====
+  const player = {
+    x: CX, y: HEIGHT-80,
+    r: 3.5, // hitbox radius
+    gr: 12, // graze radius
+    speed: 240,
+    inv: 0, // invincibility timer
+    shootCd: 0,
+    focus: false
+  };
+
+  const bullets = []; // enemy bullets
+  const pbullets = []; // player bullets
+  const enemies = [];
+  let boss = null;
+  const particles = [];
+
+  function spawnParticle(x,y,color='white', life=0.5){
+    particles.push({x,y, vx:Math.random()*100-50, vy:Math.random()*100-50, a:1, color, life, t:0});
+  }
+
+  function spawnPBullet(x,y, angle= -Math.PI/2, speed=560){
+    const vx = Math.cos(angle)*speed; const vy = Math.sin(angle)*speed;
+    pbullets.push({x,y,vx,vy,r:3, dmg:1});
+  }
+
+  function spawnEBullet(x,y, angle, speed, opts={}){
+    const b = {x,y, vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed, r:4, color: opts.color||'#7dd3ff', omega: opts.omega||0, speed, angle, age:0, grazed:false };
+    bullets.push(b);
+    return b;
+  }
+
+  function spawnEnemy(x,y, vx,vy, hp=5, shooter=null){
+    enemies.push({x,y,vx,vy,hp, t:0, shooter});
+  }
+
+  function killEnemy(e){
+    for(let i=0;i<12;i++) spawnParticle(e.x,e.y,'#9df',0.8);
+    score += 150; beep(660,0.05,'triangle',0.02);
+  }
+
+  // ===== Spawners & Patterns =====
+  const spawners = [];
+  function addSpawner(fn){ spawners.push({fn, t:0}); }
+
+  // Waves before boss
+  function setupStage(){
+    spawners.length=0;
+    // simple line enemies that shoot aimed bursts
+    addSpawner((dt,s)=>{
+      s.t += dt;
+      if(s.t>0.8 && time<28){
+        s.t = 0;
+        const rows = 5; const gap = WIDTH/(rows+1);
+        for(let i=1;i<=rows;i++){
+          const ex = gap*i; const ey = -30;
+          const vx = 0; const vy = 60 + Math.random()*30;
+          const en = {x:ex,y:ey,vx,vy,hp:4,t:0, shooter:(e)=>{
+            if(e.t>0.9 && e.t<2.5 && Math.abs(e.y-120)<20){
+              // fan aimed
+              const a = Math.atan2(player.y-e.y, player.x-e.x);
+              for(let k=-2;k<=2;k++) spawnEBullet(e.x,e.y, a + k*0.08, 150+Math.random()*20, {color:'#7dd3ff'});
+              e.t = 0.2; // shorten next shots a bit
+            }
+          }};
+          enemies.push(en);
+        }
+      }
+    });
+
+    // sweeping side spawns
+    addSpawner((dt,s)=>{
+      s.t += dt; if(time>10 && time<25 && s.t>1.4){ s.t=0; const side = Math.random()<0.5? -40: WIDTH+40; const ey = 120+Math.random()*(HEIGHT*0.3);
+        const vx = side<0? 60: -60; const vy = 0; const en = {x:side,y:ey,vx,vy,hp:8,t:0, shooter:(e)=>{
+          if(e.t>0.35){ e.t=0; const n=10; const base = Math.random()*TAU; for(let i=0;i<n;i++) spawnEBullet(e.x,e.y, base + i*(TAU/n), 120, {color:'#a6ffea'}); }
+        }}; enemies.push(en); }
+    });
+
+    // Boss arrival timer
+    boss = null; bossIntroPlayed=false; bossTimer = 0;
+  }
+
+  // Boss & Patterns
+  let bossTimer=0, bossIntroPlayed=false;
+  const Boss = function(){
+    this.x = CX; this.y = -80; this.vx=0; this.vy=90; this.hp = 1000; this.hpMax=1000; this.phase=0; this.t=0; this.inv=1.2; this.alive=true; $hpbar.style.display='block';
+  };
+  Boss.prototype.update = function(dt){
+    this.t += dt; if(this.inv>0) this.inv -= dt;
+    // enter then hover
+    if(this.y < 120){ this.y += this.vy*dt; } else { this.y=120; }
+    // gentle horizontal motion
+    this.x = CX + Math.sin(time*0.6)*140;
+
+    // rotate patterns every 8s
+    const pat = Math.floor((this.t/8)%4);
+    switch(pat){
+      case 0: this.patternSpiral(dt); break;
+      case 1: this.patternRings(dt); break;
+      case 2: this.patternAimedBursts(dt); break;
+      case 3: this.patternFlower(dt); break;
+    }
+  };
+  Boss.prototype.damage = function(d){ if(this.inv>0) return; this.hp -= d; if(this.hp<=0){ this.alive=false; for(let i=0;i<40;i++) spawnParticle(this.x,this.y,'#fff',1.2); score+=5000; beep(220,0.15,'sawtooth',0.04);} };
+
+  Boss.prototype.patternSpiral = function(dt){
+    if(!this.s1){ this.s1={t:0, dir:1, ang:0}; }
+    const s=this.s1; s.t+=dt; s.ang += (1.5*dt);
+    if(s.t>0.06){ s.t=0; const speed=120; const n=6; for(let i=0;i<n;i++){ const a = s.ang + i*(TAU/n); spawnEBullet(this.x,this.y, a, speed, {omega:0.5*s.dir, color:'#7dd3ff'}); } if(Math.random()<0.1) s.dir*=-1; }
+  };
+  Boss.prototype.patternRings = function(dt){
+    if(!this.s2){ this.s2={t:0}; }
+    const s=this.s2; s.t+=dt; if(s.t>1.1){ s.t=0; const n=36; const base = Math.random()*TAU; for(let i=0;i<n;i++) spawnEBullet(this.x,this.y, base + i*(TAU/n), 160, {color:'#ffd166'}); }
+  };
+  Boss.prototype.patternAimedBursts = function(dt){
+    if(!this.s3){ this.s3={t:0}; }
+    const s=this.s3; s.t+=dt; if(s.t>0.25){ s.t=0; const a = Math.atan2(player.y-this.y, player.x-this.x); for(let k=-2;k<=2;k++){ spawnEBullet(this.x,this.y, a + k*0.12, 190, {color:'#f99'}); } }
+  };
+  Boss.prototype.patternFlower = function(dt){
+    if(!this.s4){ this.s4={t:0, base:0}; }
+    const s=this.s4; s.t+=dt; s.base += dt*0.8; if(s.t>0.08){ s.t=0; const petals=10; const r = 0.8; for(let i=0;i<petals;i++){ const a = s.base + i*(TAU/petals); const ang = a + Math.sin((time*2)+i)*0.2; spawnEBullet(this.x,this.y, ang, 140, {color:'#c6f'}); } }
+  };
+
+  function maybeStartBoss(dt){
+    bossTimer += dt; if(!boss && time>30){ boss = new Boss(); beep(440,0.2,'square',0.04); bossIntroPlayed=true; showToast('BOSS APPEARS'); }
+  }
+
+  // ===== Game Flow =====
+  function startGame(){
+    state = STATE.PLAY; score=0; graze=0; lives=3; bombs=3; time=0; bullets.length=0; pbullets.length=0; enemies.length=0; particles.length=0; boss=null; bossTimer=0; bossIntroPlayed=false; player.x=CX; player.y=HEIGHT-80; player.inv=2; player.focus=false; $overlay.style.display='none'; $hpbar.style.display='none'; canvas.style.cursor='none';
+    setupStage();
+  }
+
+  function gameOver(){ state=STATE.GAMEOVER; $overlay.style.display='grid'; overlayMessage('GAME OVER', 'Enterでリトライ / Startで再開'); canvas.style.cursor='default'; beep(140,0.25,'sawtooth',0.05); }
+  function victory(){ state=STATE.VICTORY; $overlay.style.display='grid'; overlayMessage('VICTORY!', 'お見事！ Enterで再挑戦'); canvas.style.cursor='default'; beep(660,0.2,'square',0.04); }
+
+  function overlayMessage(title, sub){
+    const panel = $overlay.querySelector('.panel');
+    panel.querySelector('.title').textContent = title;
+    panel.querySelector('.subtitle').textContent = sub;
+  }
+
+  const $btnStart = document.getElementById('btnStart');
+  const $btnPause = document.getElementById('btnPause');
+  $btnStart.addEventListener('click', startGame);
+  $btnPause.addEventListener('click', ()=> togglePause(true));
+  function togglePause(fromButton=false){
+    if(state===STATE.PLAY){ state=STATE.PAUSE; showToast('PAUSED'); canvas.style.cursor='default'; }
+    else if(state===STATE.PAUSE){ state=STATE.PLAY; hideToast(); lastTime=performance.now(); canvas.style.cursor='none'; }
+    else if(fromButton && (state===STATE.TITLE||state===STATE.GAMEOVER||state===STATE.VICTORY)){ startGame(); }
+  }
+  function showToast(msg){ $toast.textContent=msg; $toast.style.display='block'; }
+  function hideToast(){ $toast.style.display='none'; }
+
+  function useBomb(){ if(state!==STATE.PLAY) return; if(bombs<=0) return; bombs--; $bombs.textContent=bombs; // clear bullets & damage boss a bit
+    for(const b of bullets){ for(let i=0;i<2;i++) spawnParticle(b.x,b.y,'#aef',0.5); }
+    bullets.length=0; if(boss && boss.alive) boss.damage(40);
+    player.inv = Math.max(player.inv, 1.2); beep(220,0.12,'sawtooth',0.04); }
+
+  // ===== Update Loop =====
+  function update(dt){
+    time += dt;
+
+    // Inputs
+    player.focus = keys.has(KEY.SHIFT);
+    let vx=0, vy=0; if(keys.has(KEY.LEFT)||keys.has(KEY.A)) vx-=1; if(keys.has(KEY.RIGHT)||keys.has(KEY.D)) vx+=1; if(keys.has(KEY.UP)||keys.has(KEY.W)) vy-=1; if(keys.has(KEY.DOWN)||keys.has(KEY.S)) vy+=1;
+    const spd = player.focus? player.speed*0.45 : player.speed;
+    if(vx||vy){ const inv = 1/Math.hypot(vx,vy); player.x += vx*spd*inv*dt; player.y += vy*spd*inv*dt; }
+    player.x = clamp(player.x, 16, WIDTH-16);
+    player.y = clamp(player.y, 16, HEIGHT-16);
+
+    // Mouse follow (cursor tracking)
+    if (typeof mouse !== 'undefined' && mouse.enabled) {
+      const lerp = player.focus ? 0.20 : 0.30; // smoothing
+      player.x += (mouse.x - player.x) * lerp;
+      player.y += (mouse.y - player.y) * lerp;
+      player.x = clamp(player.x, 16, WIDTH-16);
+      player.y = clamp(player.y, 16, HEIGHT-16);
+    }
+
+    if(player.inv>0) player.inv-=dt;
+
+    // Player shooting (auto-fire)
+    player.shootCd -= dt; if(player.shootCd<=0){ player.shootCd = player.focus? 0.08: 0.06; // slower but tighter when focusing
+      spawnPBullet(player.x- (player.focus? 0:8), player.y-16, -Math.PI/2, 560);
+      spawnPBullet(player.x+ (player.focus? 0:8), player.y-16, -Math.PI/2, 560);
+      if(!player.focus){ spawnPBullet(player.x, player.y-16, -Math.PI/2, 560); }
+    }
+
+    // Enemies
+    for(let i=enemies.length-1;i>=0;i--){ const e=enemies[i]; e.t+=dt; e.x+=e.vx*dt; e.y+=e.vy*dt; if(e.shooter) e.shooter(e);
+      if(e.y>HEIGHT+50 || e.x<-80 || e.x>WIDTH+80 || e.hp<=0){ if(e.hp<=0) killEnemy(e); enemies.splice(i,1); }
+    }
+
+    // Spawners
+    for(const s of spawners) s.fn(dt,s);
+
+    // Boss appear
+    maybeStartBoss(dt);
+    if(boss){ if(boss.alive){ boss.update(dt); $hpfill.style.width = clamp((boss.hp/boss.hpMax)*100,0,100)+'%'; } else { $hpbar.style.display='none'; boss=null; victory(); }
+    }
+
+    // Bullets update
+    for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i]; b.age+=dt; b.angle += b.omega*dt; const spd = b.speed; b.vx = Math.cos(b.angle)*spd; b.vy = Math.sin(b.angle)*spd; b.x += b.vx*dt; b.y += b.vy*dt;
+      // culling
+      if(b.x<-40||b.x>WIDTH+40||b.y<-60||b.y>HEIGHT+60){ bullets.splice(i,1); continue; }
+      // graze
+      const g2 = (player.gr+ b.r + 1); const g2sq = g2*g2; if(!b.grazed && dist2(player.x,player.y,b.x,b.y) < g2sq){ b.grazed=true; graze++; score+=5; $graze.textContent=graze; beep(880,0.02,'triangle',0.01); }
+      // hit
+      if(player.inv<=0){ const r = (player.r + b.r); const r2=r*r; if(dist2(player.x,player.y,b.x,b.y) < r2){
+        bullets.splice(i,1); // remove bullet
+        onHit(); continue;
+      } }
+    }
+
+    // Player bullets
+    for(let i=pbullets.length-1;i>=0;i--){ const pb=pbullets[i]; pb.x += pb.vx*dt; pb.y += pb.vy*dt; let removed=false;
+      // collide with enemies
+      for(let j=enemies.length-1;j>=0;j--){ const e=enemies[j]; const r= (pb.r+10); if(dist2(pb.x,pb.y,e.x,e.y) < r*r){ e.hp -= pb.dmg; pbullets.splice(i,1); removed=true; score+=10; break; } }
+      if(removed) continue;
+      if(boss && boss.alive){ const r=(pb.r+26); if(dist2(pb.x,pb.y,boss.x,boss.y)< r*r){ boss.damage(pb.dmg); pbullets.splice(i,1); removed=true; score+=2; } }
+      if(removed) continue;
+      if(pb.y<-30 || pb.x<-30 || pb.x>WIDTH+30) { pbullets.splice(i,1); }
+    }
+
+    // Particles
+    for(let i=particles.length-1;i>=0;i--){ const p=particles[i]; p.t+=dt; p.x += p.vx*dt; p.y += p.vy*dt; p.a = 1 - (p.t/p.life); if(p.t>=p.life) particles.splice(i,1); }
+
+    // HUD update
+    $score.textContent = score;
+    $bombs.textContent = bombs;
+    $lives.textContent = lives;
+
+    // Lose condition
+    if(lives<0 && state===STATE.PLAY){ gameOver(); }
+  }
+
+  function onHit(){
+    lives--; player.inv = 2; for(let i=0;i<20;i++) spawnParticle(player.x,player.y,'#ffb4b4',0.8); beep(180,0.1,'square',0.04);
+  }
+
+  // ===== Render =====
+  function render(){
+    ctx.clearRect(0,0,WIDTH,HEIGHT);
+
+    // starfield bg
+    const t = time*40; ctx.save(); ctx.globalAlpha=0.25; ctx.fillStyle='#89a'; for(let i=0;i<80;i++){ const x = (i*97.3 + t)%WIDTH; const y = (i*71.7 + t*0.3)%HEIGHT; ctx.fillRect(x, y, 2, 2);} ctx.restore();
+
+    // enemies
+    for(const e of enemies){ drawEnemy(e); }
+
+    // boss
+    if(boss){ drawBoss(boss); }
+
+    // bullets
+    for(const b of bullets){ ctx.beginPath(); ctx.fillStyle=b.color; ctx.arc(b.x,b.y,b.r,0,TAU); ctx.fill(); }
+
+    // player bullets
+    ctx.fillStyle='#c6f'; for(const pb of pbullets){ ctx.beginPath(); ctx.arc(pb.x,pb.y,pb.r,0,TAU); ctx.fill(); }
+
+    // particles
+    for(const p of particles){ ctx.globalAlpha = clamp(p.a,0,1); ctx.fillStyle=p.color; ctx.fillRect(p.x-1,p.y-1,2,2); ctx.globalAlpha=1; }
+
+    // player
+    drawPlayer();
+
+    // boss hp bar already in DOM
+  }
+
+  function drawEnemy(e){
+    ctx.save(); ctx.translate(e.x,e.y); ctx.fillStyle='#aef'; ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,-10); ctx.lineTo(8,6); ctx.lineTo(-8,6); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
+
+  function drawBoss(b){
+    ctx.save(); ctx.translate(b.x,b.y); const pulse = 1 + Math.sin(time*6)*0.06; ctx.scale(pulse,pulse);
+    const grd = ctx.createRadialGradient(0,0,8, 0,0,28); grd.addColorStop(0,'#dff'); grd.addColorStop(1,'#6cf');
+    ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(0,0,26,0,TAU); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=2; ctx.beginPath(); for(let i=0;i<6;i++){ const a=i*(TAU/6)+time; ctx.moveTo(Math.cos(a)*12, Math.sin(a)*12); ctx.lineTo(Math.cos(a)*22, Math.sin(a)*22);} ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPlayer(){
+    ctx.save(); ctx.translate(player.x, player.y);
+    // ship
+    ctx.fillStyle= player.inv>0? 'rgba(255,255,255,0.5)':'#fff';
+    ctx.strokeStyle='#8af3'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(0,-10); ctx.lineTo(8,8); ctx.lineTo(0,4); ctx.lineTo(-8,8); ctx.closePath(); ctx.fill(); ctx.stroke();
+    // thruster
+    ctx.fillStyle='#6cf'; ctx.beginPath(); ctx.arc(0,10,3,0,TAU); ctx.fill();
+    // focus hitbox
+    if(player.focus){ ctx.strokeStyle='#ffb4b4'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(0,0, player.r, 0, TAU); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  // ===== Main Loop =====
+  function loop(now){
+    requestAnimationFrame(loop);
+    if(state!==STATE.PLAY){ lastTime = now; return; }
+    let dt = (now - lastTime)/1000; lastTime = now; dt = Math.min(dt, 1/30); // clamp
+
+    // FPS calc
+    fpsAccum += dt; fpsCount++; if(fpsAccum>=0.5){ fps = Math.round(fpsCount/fpsAccum); fpsAccum=0; fpsCount=0; $fps.textContent=fps; }
+
+    update(dt);
+    render();
+  }
+  requestAnimationFrame(loop);
+
+  // Start in title screen
+  function drawTitle(){
+    ctx.clearRect(0,0,WIDTH,HEIGHT);
+    ctx.fillStyle='rgba(255,255,255,0.1)'; ctx.textAlign='center'; ctx.font='700 18px system-ui, sans-serif'; ctx.fillText('Press Enter to Start', WIDTH/2, HEIGHT*0.6);
+  }
+  drawTitle();
+
+})();
+</script>
+</body>
+</html>
